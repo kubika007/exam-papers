@@ -23,6 +23,17 @@
       <h2>选择科目</h2>
       <span class="hint" id="countHint"></span>
     </section>
+
+    <div class="filterbar" id="gradeFilter">
+      <span class="filter-label">年级</span>
+      <button class="chip active" data-grade="">全部</button>
+      <button class="chip" data-grade="七年级">七年级</button>
+      <button class="chip" data-grade="八年级">八年级</button>
+      <button class="chip" data-grade="九年级">九年级</button>
+      <button class="chip" data-grade="__none__">未标年级</button>
+      <span class="filter-tip" id="filterTip"></span>
+    </div>
+
     <section id="subjects" class="grid"></section>
   </main>
 
@@ -54,23 +65,36 @@
     </div>
 
     <div class="admin-section">
-      <label class="field-label">科目</label>
-      <select id="upSubject" class="text-input"></select>
-      <input id="upSubjectNew" class="text-input hidden" type="text" placeholder="输入新科目名称，如：语文" />
-      <label class="checkbox">
-        <input id="upSubjectNewToggle" type="checkbox" /> 新建科目
-      </label>
+      <label class="field-label">选择文件（支持压缩包）</label>
+      <input id="upFiles" class="file-input" type="file" multiple
+             accept=".zip,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" />
+      <p class="hint">
+        可直接拖入 <b>.zip 压缩包</b>：会自动解压，并按「文件夹名 / 文件名」识别<b>年级 · 科目 · 学期</b>，
+        识别结果在下方清单里可逐条修改。<br />
+        单份不超过 25MB。
+      </p>
     </div>
 
     <div class="admin-section">
-      <label class="field-label">学期</label>
-      <input id="upSemester" class="text-input" type="text" placeholder="如：2025-2026 上学期" />
+      <label class="field-label">统一归类（可选）</label>
+      <div class="bulk-row">
+        <select id="bulkGrade" class="text-input small">
+          <option value="">年级：自动识别</option>
+          <option value="七年级">七年级</option>
+          <option value="八年级">八年级</option>
+          <option value="九年级">九年级</option>
+        </select>
+        <input id="bulkSemester" class="text-input small" type="text" placeholder="学期：自动识别" />
+      </div>
+      <p class="hint">填了就覆盖全部文件的年级 / 学期；留空则按文件名自动识别。</p>
     </div>
 
-    <div class="admin-section">
-      <label class="field-label">选择试卷文件</label>
-      <input id="upFiles" class="file-input" type="file" multiple />
-      <p class="hint">支持 PDF / Word / 图片等任意格式，可一次选多个；单份不超过 25MB。</p>
+    <div id="reviewBox" class="review-box hidden">
+      <div class="review-head">
+        <span id="reviewCount"></span>
+        <button id="clearPending" class="btn ghost small" type="button">清空清单</button>
+      </div>
+      <div id="reviewList" class="review-list"></div>
     </div>
 
     <button id="uploadBtn" class="btn primary" type="button">上传</button>
@@ -79,6 +103,7 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <script src="/zipper.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

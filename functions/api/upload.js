@@ -26,6 +26,7 @@ export async function onRequestPost({ request, env }) {
 
   const subject = (form.get("subject") || "").toString().trim();
   const semester = (form.get("semester") || "").toString().trim();
+  const grade = (form.get("grade") || "").toString().trim(); // 年级（可为空＝未标年级）
   const files = form.getAll("file");
 
   if (!subject || !semester) {
@@ -50,10 +51,13 @@ export async function onRequestPost({ request, env }) {
       metadata: {
         size: file.size,
         type: file.type || "application/octet-stream",
+        grade: grade,                 // 年级，空串表示未标年级
+        subject: subject,
+        semester: semester,
         uploaded: new Date().toISOString(),
       },
     });
-    results.push({ key, name: rawName });
+    results.push({ key, name: rawName, grade });
   }
 
   return Response.json({ ok: true, count: results.length, results });

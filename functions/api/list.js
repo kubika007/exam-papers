@@ -34,6 +34,8 @@ export async function onRequest({ request, env }) {
         objects.push({
           key: k.name,
           size: meta.size,
+          type: meta.type,
+          grade: meta.grade || "",   // 年级（空＝未标年级，前端显示为灰色徽章）
           uploaded: meta.uploaded,
         });
       }
