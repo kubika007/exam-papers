@@ -1,6 +1,11 @@
 name = "exam-papers"
-pages_build_output_dir = "public"
 compatibility_date = "2024-09-23"
-# 说明：R2 存储桶绑定 (PAPERS) 与管理员口令密钥 (ADMIN_TOKEN)
-# 在 Cloudflare 控制台「Pages 项目 → Settings → Functions」中配置，
-# 也可用 wrangler 命令设置（见 README）。
+
+# ⚠️ 本项目是 Cloudflare Pages（静态托管 public/ + 根目录 functions/ 作为后端）
+# 构建请在控制台配置：框架预设「无」、构建命令留空、构建输出目录 public
+# 千万不要用 `wrangler deploy`（那是 Workers 的命令，在 Pages 上会报
+# "Missing entry-point to Worker script or to assets directory"）
+pages_build_output_dir = "public"
+
+# R2 绑定变量名 PAPERS、管理员口令 ADMIN_TOKEN
+# 需在控制台「Workers 和 Pages → exam-papers → 设置」中配置（命令行无法绑定 R2）
