@@ -36,67 +36,66 @@ papers/{科目}/{学期}/{文件名}
 
 ---
 
-## 部署步骤（新 Cloudflare 账号）
+## 部署步骤（Cloudflare Pages + GitHub）
 
-> 全程在命令行完成，约 5 分钟。需要本机已装 Node.js（建议 18+）。
+本项目已推送到 https://github.com/kubika007/exam-papers ，直接连接部署即可。
 
-### 1. 安装并登录 Wrangler
+### 1. 创建 R2 存储桶
 
-```bash
-npm install -g wrangler
-wrangler login          # 浏览器打开，登录你的新 Cloudflare 账号
-```
+Cloudflare 控制台 → **存储和数据库 → R2** → 创建存储桶，名字填 `exam-papers`。
+（或直接命令行：`npx wrangler r2 bucket create exam-papers`）
 
-### 2. 创建 R2 存储桶
+### 2. 创建 Pages 项目并连接 GitHub
 
-```bash
-wrangler r2 bucket create exam-papers
-```
+Cloudflare 控制台 → **Workers 和 Pages** → **创建** → **Pages** → **连接到 Git**
+选择仓库 `kubika007/exam-papers`，生产分支选 `main`。
 
-### 3. 部署前端 + 后端函数
+### 3. 构建设置（⚠️ 关键，配错会构建失败）
 
-在 `exam-papers/` 目录内执行：
+| 项目 | 填什么 |
+|---|---|
+| 框架预设 | **无 / None** |
+| 构建命令 | **留空** |
+| 部署命令 | **留空**（若有该字段） |
+| 构建输出目录 | **public** |
+| 根路径 / Root directory | 留空 |
 
-```bash
-wrangler pages deploy public --project-name exam-papers
-```
-
-首次会询问「关联已有项目 / 新建项目」，选新建即可。部署完成后会得到一个 `*.pages.dev` 网址。
+> **常见坑**：不要把部署命令填成 `npx wrangler deploy`。那是给 **Workers** 用的，在 Pages 项目上会报
+> `Missing entry-point to Worker script or to assets directory`。
+> 本仓库是「静态文件 + `functions/` 目录」，Pages 会自动托管 `public/` 并自动识别 `functions/` 作为后端，**不需要任何构建或 wrangler 命令**。
 
 ### 4. 给 Pages 项目绑定 R2 存储桶（必须）
 
-登录 Cloudflare 控制台 → **Workers 和 Pages** → 选 `exam-papers` →
+Cloudflare 控制台 → **Workers 和 Pages** → 选 `exam-papers` →
 **设置 → 函数 → R2 存储桶绑定** → 添加：
 
-- 变量名称填：`PAPERS`
-- 关联存储桶选：`exam-papers`
-
-（Pages 的 R2 绑定目前只能在控制台设置，无法用命令行。）
+- 变量名称：`PAPERS`
+- 关联存储桶：`exam-papers`
 
 ### 5. 设置管理员口令
 
-```bash
-wrangler pages secret put ADMIN_TOKEN --project-name exam-papers
-```
+控制台路径：**Workers 和 Pages** → `exam-papers` → **设置 → 环境变量**
+添加变量 `ADMIN_TOKEN`，值为你要设置的口令（如 `wodeMima2026`）。
 
-> 输入一串只有你自己知道的密码（例如 `wodeMima2026`）。这就是网页「管理 / 上传」里要填的口令。
+命令行方式替代：`npx wrangler pages secret put ADMIN_TOKEN --project-name exam-papers`
 
-### 6. 完工 🎉
+### 6. 重新部署
 
-打开第 3 步得到的 `https://exam-papers.pages.dev` 即可使用。
-（设置完绑定 / 密钥后，函数即时生效，无需重新部署。）
+回到 **部署** 页签点「重试部署」，或直接在 GitHub 上推一个空 commit 触发。
+成功后会得到 `https://exam-papers.pages.dev`（以及每次 PR/分支的预览地址）。
+
+> 修改 R2 绑定和环境变量后即时生效，无需重新构建。
 
 ---
 
-## 可选：用 GitHub 自动部署
+## 可选：不从 GitHub 部署（命令行直传）
 
-如果你更习惯「推代码就自动上线」：
+```bash
+npx wrangler login
+npx wrangler pages deploy public --project-name exam-papers
+```
 
-1. 在 GitHub 新建仓库，把本文件夹内容推上去
-2. Cloudflare 控制台 → Workers 和 Pages → 创建 → 连接 Git 仓库 → 选该仓库
-3. 构建设置：框架预设选「无」，构建输出目录填 `public`
-4. 仍须在控制台给项目绑定 R2（`PAPERS`）并设置 `ADMIN_TOKEN` 密钥
-5. 之后每次 `git push` 都会自动重新部署
+之后仍需按第 4、5 步在控制台绑定 R2 和设置 `ADMIN_TOKEN`。
 
 ---
 
@@ -122,5 +121,4 @@ wrangler pages secret put ADMIN_TOKEN --project-name exam-papers
 - `ADMIN_TOKEN` 是上传 / 删除的唯一门槛，请设置足够复杂的口令，且不要外泄。
 - 任何拿到口令的人都能上传 / 删除试卷；如需多管理员或审计，可在此基础上扩展。
 - R2 标准版对下载（出网）免费，仅按存储量计费，试卷量级下几乎为零成本。
-- 预览 UI（无需后端）：本地用任意静态服务器打开 `public/index.html` 并在网址后加 `?demo=1`。
-```
+- 预览 UI（无需后端）：本地用任意静态服务器打开 `public/index.html`，并在网址后加 `?demo=1`。
