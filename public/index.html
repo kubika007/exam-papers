@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>试卷库 · 每学期各科试卷</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📚</span>
+      <div class="brand-text">
+        <h1>试卷库</h1>
+        <p class="sub">按「科目 → 学期 → 试卷」整理每一次考试的试卷</p>
+      </div>
+    </div>
+    <button id="adminBtn" class="admin-btn" type="button">管理 / 上传</button>
+  </header>
+
+  <main class="container">
+    <section class="section-title">
+      <h2>选择科目</h2>
+      <span class="hint" id="countHint"></span>
+    </section>
+    <section id="subjects" class="grid"></section>
+  </main>
+
+  <!-- 浏览弹窗：科目 → 学期 → 试卷 -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <nav id="crumb" class="crumb"></nav>
+        <button id="closeModal" class="icon-btn" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- 管理员面板 -->
+  <aside id="adminPanel" class="admin-panel hidden">
+    <div class="admin-head">
+      <h3>管理 / 上传试卷</h3>
+      <button id="closeAdmin" class="icon-btn" type="button" aria-label="关闭">✕</button>
+    </div>
+
+    <div class="admin-section">
+      <label class="field-label">管理员口令</label>
+      <div class="token-row">
+        <input id="tokenInput" class="text-input" type="password" placeholder="输入部署时设置的 ADMIN_TOKEN" />
+        <button id="saveToken" class="btn small" type="button">保存</button>
+      </div>
+      <p class="token-status" id="tokenStatus"></p>
+    </div>
+
+    <div class="admin-section">
+      <label class="field-label">科目</label>
+      <select id="upSubject" class="text-input"></select>
+      <input id="upSubjectNew" class="text-input hidden" type="text" placeholder="输入新科目名称，如：语文" />
+      <label class="checkbox">
+        <input id="upSubjectNewToggle" type="checkbox" /> 新建科目
+      </label>
+    </div>
+
+    <div class="admin-section">
+      <label class="field-label">学期</label>
+      <input id="upSemester" class="text-input" type="text" placeholder="如：2025-2026 上学期" />
+    </div>
+
+    <div class="admin-section">
+      <label class="field-label">选择试卷文件</label>
+      <input id="upFiles" class="file-input" type="file" multiple />
+      <p class="hint">支持 PDF / Word / 图片等任意格式，可一次选多个。</p>
+    </div>
+
+    <button id="uploadBtn" class="btn primary" type="button">上传</button>
+    <div id="uploadLog" class="upload-log"></div>
+  </aside>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
