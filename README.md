@@ -2,6 +2,10 @@
 
 一个跑在 **Cloudflare Pages + Workers KV** 上的静态网站，用来按 **科目 → 学期 → 试卷** 归档并下载每次考试的各科试卷。老师打开网页点几下就能下载；管理员登录口令后可直接在网页上传 / 删除试卷，无需懂代码。
 
+- 🌐 **线上地址：https://exam-papers.pages.dev**
+- 📦 源码仓库：https://github.com/kubika007/exam-papers （推 `main` 即自动重新部署）
+- 🔑 管理口令：`exam2026`（在控制台「设置 → 环境变量」里改）
+
 > 💳 **全程免费、不需要绑定银行卡**。试卷存在 Workers KV（免费层 1GB），而不是 R2——R2 虽免费但必须绑信用卡/PayPal 才能开通。
 
 ## 功能
@@ -80,11 +84,21 @@ Cloudflare 控制台 → **Workers 和 Pages** → **创建** → **Pages** → 
 
 ### 4. 给 Pages 项目绑定 KV 命名空间（必须）
 
-Cloudflare 控制台 → **Workers 和 Pages** → 选 `exam-papers` →
-**设置 → 函数 → KV 命名空间绑定** → 添加：
+**推荐做法（持久）**：直接写在仓库根目录的 `wrangler.toml` 里——
 
-- 变量名称：`PAPERS`
-- 命名空间：`exam-papers`
+```toml
+[[kv_namespaces]]
+binding = "PAPERS"
+id = "你的 KV 命名空间 ID"
+```
+
+或者在控制台：**Workers 和 Pages** → 选 `exam-papers` →
+**设置 → 函数 → KV 命名空间绑定** → 添加：变量名称 `PAPERS`、命名空间 `exam-papers`。
+
+> ⚠️ **最大的坑**：Pages 每次构建都会读取仓库里的 `wrangler.toml`，**并用它覆盖通过控制台/API 设置的绑定**。
+> 也就是说：只在控制台点绑定，下一次 push 触发构建后就会被清掉，表现为
+> `/api/list` 返回 `Cannot read properties of undefined (reading 'list')`。
+> 所以 KV 绑定请写在 `wrangler.toml` 里；而口令 `ADMIN_TOKEN` 是密钥、不能进仓库，只能在控制台/API 设（密钥不会被覆盖）。
 
 ### 5. 设置管理员口令
 
