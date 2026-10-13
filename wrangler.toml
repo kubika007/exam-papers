@@ -1,5 +1,5 @@
 name = "exam-papers"
-compatibility_date = "2024-09-23"
+compatibility_date = "2026-10-13"
 
 # ⚠️ 本项目是 Cloudflare Pages（静态托管 public/ + 根目录 functions/ 作为后端）
 # 构建请在控制台配置：框架预设「无」、构建命令留空、构建输出目录 public
@@ -8,7 +8,11 @@ compatibility_date = "2024-09-23"
 pages_build_output_dir = "public"
 
 # 试卷存放在 Workers KV（免费层无需绑定信用卡，区别于 R2 必须绑卡）
-# 需要在控制台「Workers 和 Pages → exam-papers → 设置 → 函数 → KV 命名空间绑定」里
-# 把 KV 命名空间绑定为变量名 PAPERS；
-# 管理员口令在「设置 → 环境变量」里添加 ADMIN_TOKEN。
-# 也可通过 Cloudflare API 由脚本完成以上配置。
+# ⚠️ KV 绑定必须写在这里：Pages 每次构建都会读本文件，
+#    通过 API/控制台设的绑定会被本文件覆盖掉（教训：只在控制台设会失效）。
+[[kv_namespaces]]
+binding = "PAPERS"
+id = "01cf511cd9274a87bf8931da31ff838e"
+
+# 管理员口令 ADMIN_TOKEN 是密钥，不能写进文件（仓库是公开的），
+# 只能在控制台「设置 → 环境变量」或经 API 设置；密钥不会被本文件覆盖。
