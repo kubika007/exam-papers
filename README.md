@@ -1,6 +1,8 @@
 # 试卷库（Exam Papers）
 
-一个跑在 **Cloudflare Pages + R2** 上的静态网站，用来按 **科目 → 学期 → 试卷** 归档并下载每次考试的各科试卷。老师打开网页点几下就能下载；管理员登录口令后可直接在网页上传 / 删除试卷，无需懂代码。
+一个跑在 **Cloudflare Pages + Workers KV** 上的静态网站，用来按 **科目 → 学期 → 试卷** 归档并下载每次考试的各科试卷。老师打开网页点几下就能下载；管理员登录口令后可直接在网页上传 / 删除试卷，无需懂代码。
+
+> 💳 **全程免费、不需要绑定银行卡**。试卷存在 Workers KV（免费层 1GB），而不是 R2——R2 虽免费但必须绑信用卡/PayPal 才能开通。
 
 ## 功能
 
@@ -8,7 +10,7 @@
 - 📁 学期：进入科目后弹出以「学期」为单位的文件夹，例如 `2025-2026 上学期`
 - 📄 试卷：进入学期后列出该学期所有试卷，点「下载」即可保存
 - 🔐 管理后台：右上角「管理 / 上传」，输入口令后可网页上传（支持多文件）、新建科目、删除试卷
-- 💾 文件存于 Cloudflare R2，下载走 Cloudflare 边缘节点，速度快、无流量费
+- 💾 文件存于 Workers KV，下载走 Cloudflare 全球边缘节点
 
 ## 目录结构
 
@@ -28,22 +30,34 @@ exam-papers/
 └── README.md
 ```
 
-R2 中的文件按此结构存放：
+KV 中的 key 按此结构存放：
 ```
 papers/{科目}/{学期}/{文件名}
 例：papers/语文/2025-2026 上学期/期中考试.pdf
 ```
 
+## 容量说明（KV 免费层）
+
+| 项 | 上限 |
+|---|---|
+| 总存储 | **1 GB**（约可放 200~500 份试卷PDF） |
+| 单份文件 | **25 MB** |
+| 读操作 | 每天约 100 万次（远超学校使用量） |
+| 写操作 | 每天 1000 次（够用） |
+
+超过 1GB 后需清理旧试卷，或升级付费方案（付费才需要绑卡）。
+
 ---
 
-## 部署步骤（Cloudflare Pages + GitHub）
+## 部署步骤（Cloudflare Pages + GitHub，无需银行卡）
 
 本项目已推送到 https://github.com/kubika007/exam-papers ，直接连接部署即可。
 
-### 1. 创建 R2 存储桶
+### 1. 创建 KV 命名空间
 
-Cloudflare 控制台 → **存储和数据库 → R2** → 创建存储桶，名字填 `exam-papers`。
-（或直接命令行：`npx wrangler r2 bucket create exam-papers`）
+Cloudflare 控制台 → **存储和数据库 → Workers KV** → 创建命名空间，名字填 `exam-papers`。
+
+> KV 属于 Workers 免费层，开通过程**不会要求绑卡**（如果页面要你绑卡，说明点到的是 R2 或其他付费服务，请确认路径是 Workers KV）。
 
 ### 2. 创建 Pages 项目并连接 GitHub
 
@@ -64,38 +78,25 @@ Cloudflare 控制台 → **Workers 和 Pages** → **创建** → **Pages** → 
 > `Missing entry-point to Worker script or to assets directory`。
 > 本仓库是「静态文件 + `functions/` 目录」，Pages 会自动托管 `public/` 并自动识别 `functions/` 作为后端，**不需要任何构建或 wrangler 命令**。
 
-### 4. 给 Pages 项目绑定 R2 存储桶（必须）
+### 4. 给 Pages 项目绑定 KV 命名空间（必须）
 
 Cloudflare 控制台 → **Workers 和 Pages** → 选 `exam-papers` →
-**设置 → 函数 → R2 存储桶绑定** → 添加：
+**设置 → 函数 → KV 命名空间绑定** → 添加：
 
 - 变量名称：`PAPERS`
-- 关联存储桶：`exam-papers`
+- 命名空间：`exam-papers`
 
 ### 5. 设置管理员口令
 
 控制台路径：**Workers 和 Pages** → `exam-papers` → **设置 → 环境变量**
 添加变量 `ADMIN_TOKEN`，值为你要设置的口令（如 `wodeMima2026`）。
 
-命令行方式替代：`npx wrangler pages secret put ADMIN_TOKEN --project-name exam-papers`
-
 ### 6. 重新部署
 
 回到 **部署** 页签点「重试部署」，或直接在 GitHub 上推一个空 commit 触发。
-成功后会得到 `https://exam-papers.pages.dev`（以及每次 PR/分支的预览地址）。
+成功后会得到 `https://exam-papers.pages.dev`。
 
-> 修改 R2 绑定和环境变量后即时生效，无需重新构建。
-
----
-
-## 可选：不从 GitHub 部署（命令行直传）
-
-```bash
-npx wrangler login
-npx wrangler pages deploy public --project-name exam-papers
-```
-
-之后仍需按第 4、5 步在控制台绑定 R2 和设置 `ADMIN_TOKEN`。
+> 修改 KV 绑定和环境变量后即时生效，无需重新构建（前提是第 3 步配置正确，能正常部署）。
 
 ---
 
@@ -111,6 +112,8 @@ npx wrangler pages deploy public --project-name exam-papers
 4. 选择试卷文件（可一次选多个）→ 点「上传」
 5. 回到主页刷新即可看到新试卷
 
+> 提示：KV 写入是全球异步生效的，极端情况下上传后最多几十秒才能在列表里看到，刷新即可。
+
 ### 删除试卷
 以管理员身份打开某学期，每份试卷右侧会出现「删除」按钮（二次确认后删除）。
 
@@ -120,5 +123,5 @@ npx wrangler pages deploy public --project-name exam-papers
 
 - `ADMIN_TOKEN` 是上传 / 删除的唯一门槛，请设置足够复杂的口令，且不要外泄。
 - 任何拿到口令的人都能上传 / 删除试卷；如需多管理员或审计，可在此基础上扩展。
-- R2 标准版对下载（出网）免费，仅按存储量计费，试卷量级下几乎为零成本。
+- Workers KV 免费层不需要绑卡；只有当超出免费额度、主动升级付费方案时才需要提供支付方式。
 - 预览 UI（无需后端）：本地用任意静态服务器打开 `public/index.html`，并在网址后加 `?demo=1`。

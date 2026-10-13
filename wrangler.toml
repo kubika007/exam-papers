@@ -7,5 +7,8 @@ compatibility_date = "2024-09-23"
 # "Missing entry-point to Worker script or to assets directory"）
 pages_build_output_dir = "public"
 
-# R2 绑定变量名 PAPERS、管理员口令 ADMIN_TOKEN
-# 需在控制台「Workers 和 Pages → exam-papers → 设置」中配置（命令行无法绑定 R2）
+# 试卷存放在 Workers KV（免费层无需绑定信用卡，区别于 R2 必须绑卡）
+# 需要在控制台「Workers 和 Pages → exam-papers → 设置 → 函数 → KV 命名空间绑定」里
+# 把 KV 命名空间绑定为变量名 PAPERS；
+# 管理员口令在「设置 → 环境变量」里添加 ADMIN_TOKEN。
+# 也可通过 Cloudflare API 由脚本完成以上配置。

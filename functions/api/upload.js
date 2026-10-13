@@ -1,8 +1,11 @@
 /**
  * POST /api/upload  (需管理员 Bearer Token)
  * 表单字段：subject, semester, file(可多个)
- * 存入 R2 键：papers/{subject}/{semester}/{filename}
+ * 存入 KV 键：papers/{subject}/{semester}/{filename}
+ * 注意 Workers KV 单条上限 25MB，超大文件会被拒绝
  */
+const MAX_SIZE = 25 * 1024 * 1024; // 25MB（KV 上限）
+
 function authorized(request, env) {
   const auth = request.headers.get("Authorization") || "";
   const expected = "Bearer " + (env.ADMIN_TOKEN || "");
@@ -34,11 +37,21 @@ export async function onRequestPost({ request, env }) {
 
   const results = [];
   for (const file of files) {
-    // 仅取文件名，去掉可能带有的路径
     const rawName = (file.name || "file").split(/[\\/]/).pop();
+    if (file.size > MAX_SIZE) {
+      return new Response(
+        `${rawName} 超过 25MB（Workers KV 单条上限），请压缩后重试`,
+        { status: 413 }
+      );
+    }
     const key = `papers/${subject}/${semester}/${rawName}`;
-    await env.PAPERS.put(key, file.stream(), {
-      httpMetadata: { contentType: file.type || "application/octet-stream" },
+    const buf = await file.arrayBuffer();
+    await env.PAPERS.put(key, buf, {
+      metadata: {
+        size: file.size,
+        type: file.type || "application/octet-stream",
+        uploaded: new Date().toISOString(),
+      },
     });
     results.push({ key, name: rawName });
   }
