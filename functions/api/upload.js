@@ -1,7 +1,7 @@
 /**
  * POST /api/upload  (需管理员 Bearer Token)
- * 表单字段：subject, semester, file(可多个)
- * 存入 KV 键：papers/{subject}/{semester}/{filename}
+ * 表单字段：subject, semester, month(可选), file(可多个)
+ * 存入 KV 键：papers/{subject}/{semester}/{month}/{filename}（无月份时少一层）
  * 注意 Workers KV 单条上限 25MB，超大文件会被拒绝
  */
 const MAX_SIZE = 25 * 1024 * 1024; // 25MB（KV 上限）
@@ -45,7 +45,7 @@ export async function onRequestPost({ request, env }) {
         { status: 413 }
       );
     }
-    const key = `papers/${subject}/${semester}/${rawName}`;
+    const key = `papers/${subject}/${semester}/${month ? month + "/" : ""}${rawName}`;
     const buf = await file.arrayBuffer();
     await env.PAPERS.put(key, buf, {
       metadata: {
@@ -54,10 +54,11 @@ export async function onRequestPost({ request, env }) {
         grade: grade,                 // 年级，空串表示未标年级
         subject: subject,
         semester: semester,
+        month: month,
         uploaded: new Date().toISOString(),
       },
     });
-    results.push({ key, name: rawName, grade });
+    results.push({ key, name: rawName, grade, month });
   }
 
   return Response.json({ ok: true, count: results.length, results });

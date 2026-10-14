@@ -207,6 +207,14 @@ body {
 .row-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 .row .left { flex-wrap: wrap; }
 
+/* 文件夹管理工具条（新建 / 删除文件夹） */
+.folder-toolbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 10px 12px; margin-bottom: 12px;
+  border: 1px dashed var(--line); border-radius: 11px; background: #fafbff;
+}
+.folder-toolbar .hint { flex-basis: 100%; }
+
 /* 归类行内编辑 */
 .row-edit { display: block; background: var(--accent-soft); }
 .edit-grid { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

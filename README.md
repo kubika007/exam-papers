@@ -40,20 +40,23 @@ exam-papers/
 │   ├── zipper.js           # ZIP 本地解压 + 年级/科目/学期 自动识别
 │   └── app.js              # 前端逻辑（浏览 + 年级筛选 + 上传 + 归类）
 ├── functions/api/          # 后端（Cloudflare Pages Functions，无需自建服务器）
-│   ├── list.js             # 列出某科目 / 学期下的内容（含 grade 年级字段）
+│   ├── list.js             # 列出某科目 / 学期 / 月份下的内容（含 grade 年级字段）
 │   ├── download.js         # 下载试卷
-│   ├── upload.js           # 上传试卷（需口令，支持 grade 字段）
-│   ├── move.js             # 归类：把文件移到正确 科目/学期 并补填年级
-│   ├── delete.js           # 删除试卷（需口令）
+│   ├── upload.js           # 上传试卷（需口令，支持 grade / month 字段）
+│   ├── upload-zip.js       # 整包上传兜底：服务器解压并自动识别
+│   ├── move.js             # 移动：把文件移到其它 科目/学期/月份 并补填年级
+│   ├── folder.js           # 新建文件夹（空文件夹用 .keep 占位）
+│   ├── delete.js           # 删除试卷或整个文件夹（需口令）
 │   └── check.js            # 校验口令
 ├── wrangler.toml           # Cloudflare 配置（KV 绑定写在这里）
 └── README.md
 ```
 
-KV 中的 key 按此结构存放：
+KV 中的 key 按此结构存放（月份可选）：
 ```
 papers/{科目}/{学期}/{文件名}
-例：papers/语文/2025-2026 上学期/期中考试.pdf
+papers/{科目}/{学期}/{月份}/{文件名}
+例：papers/数学/2026年下半年/10月/数学1.pdf
 ```
 
 ## 容量说明（KV 免费层）

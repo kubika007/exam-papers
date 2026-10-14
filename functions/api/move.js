@@ -38,10 +38,11 @@ export async function onRequestPost({ request, env }) {
     const { value, metadata } = await env.PAPERS.getWithMetadata(from, "arrayBuffer");
     if (value === null) return new Response("源文件不存在", { status: 404 });
 
-    // 目标路径的科目 / 学期顺带写进 metadata，便于后续检索
+    // 目标路径的 科目 / 学期 / 月份 顺带写进 metadata，便于后续检索
     const parts = to.split("/");
     const subject = parts[1] || "";
     const semester = parts[2] || "";
+    const month = parts[3] && parts[3] !== ".keep" ? parts[3] : "";
 
     await env.PAPERS.put(to, value, {
       metadata: {
@@ -49,11 +50,12 @@ export async function onRequestPost({ request, env }) {
         grade: grade,
         subject: subject,
         semester: semester,
+        month: month,
         moved: new Date().toISOString(),
       },
     });
     await env.PAPERS.delete(from);
-    return Response.json({ ok: true, from, to, grade });
+    return Response.json({ ok: true, from, to, grade, month });
   } catch (e) {
     return new Response("归类失败：" + e.message, { status: 500 });
   }

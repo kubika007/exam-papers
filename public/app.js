@@ -31,6 +31,7 @@ const FALLBACK_EMOJI = "📘";
 const SmartZip = window.SmartZip || {};
 const SEMESTERS = SmartZip.semesters ? SmartZip.semesters(2024) : [];
 const CURRENT_SEMESTER = SEMESTERS.length ? SEMESTERS[SEMESTERS.length - 1] : "";
+const MONTHS = SmartZip.months || [];
 
 /* ---------- demo 数据 ---------- */
 const DEMO_DATA = {
@@ -92,14 +93,42 @@ async function apiDelete(key) {
   return res.json();
 }
 
-async function apiMove(from, subject, semester, grade) {
-  const to = `papers/${subject}/${semester}/${from.split("/").pop()}`;
+/** 删除整个文件夹（后端递归删除其下所有文件） */
+async function apiDeleteFolder(prefix) {
+  const res = await fetch(apiBase + "/api/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
+    body: JSON.stringify({ prefix }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error("删除文件夹失败 " + res.status + (detail ? "：" + detail.slice(0, 80) : ""));
+  }
+  return res.json();
+}
+
+/** 新建文件夹（空文件夹用 .keep 占位） */
+async function apiCreateFolder(prefix) {
+  const res = await fetch(apiBase + "/api/folder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
+    body: JSON.stringify({ prefix }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error("创建文件夹失败 " + res.status + (detail ? "：" + detail.slice(0, 80) : ""));
+  }
+  return res.json();
+}
+
+async function apiMove(from, subject, semester, grade, month) {
+  const to = `papers/${subject}/${semester}/${month ? month + "/" : ""}${from.split("/").pop()}`;
   const res = await fetch(apiBase + "/api/move", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
     body: JSON.stringify({ from, to, grade }),
   });
-  if (!res.ok) throw new Error("归类失败 " + res.status);
+  if (!res.ok) throw new Error("移动失败 " + res.status);
   return res.json();
 }
 
@@ -180,8 +209,8 @@ async function renderSubjects() {
   });
 }
 
-/* ---------- 弹窗：学期 / 试卷 ---------- */
-let state = { subject: null, semester: null };
+/* ---------- 弹窗：学期 / 月份 / 试卷 ---------- */
+let state = { subject: null, semester: null, month: null };
 
 function openModal() {
   $("#modal").classList.remove("hidden");
@@ -190,7 +219,7 @@ function openModal() {
 function closeModal() {
   $("#modal").classList.add("hidden");
   document.body.style.overflow = "";
-  state = { subject: null, semester: null };
+  state = { subject: null, semester: null, month: null };
 }
 
 function renderCrumb() {
@@ -198,23 +227,30 @@ function renderCrumb() {
   const gTag = gradeFilter
     ? `<span class="crumb-tag">${escapeHtml(gradeFilter === "__none__" ? "未标年级" : gradeFilter)}</span>` : "";
   if (!state.subject) { c.innerHTML = "全部科目" + gTag; return; }
-  if (!state.semester) {
-    c.innerHTML = `<a data-go="root">全部科目</a><span class="sep">/</span><b>${escapeHtml(state.subject)}</b>` + gTag;
-  } else {
-    c.innerHTML = `<a data-go="root">全部科目</a><span class="sep">/</span>` +
-      `<a data-go="subject">${escapeHtml(state.subject)}</a><span class="sep">/</span><b>${escapeHtml(state.semester)}</b>` + gTag;
+  let html = `<a data-go="root">全部科目</a><span class="sep">/</span><b>${escapeHtml(state.subject)}</b>`;
+  if (state.semester) {
+    html = `<a data-go="root">全部科目</a><span class="sep">/</span>` +
+      `<a data-go="subject">${escapeHtml(state.subject)}</a><span class="sep">/</span><b>${escapeHtml(state.semester)}</b>`;
   }
+  if (state.semester && state.month) {
+    html = `<a data-go="root">全部科目</a><span class="sep">/</span>` +
+      `<a data-go="subject">${escapeHtml(state.subject)}</a><span class="sep">/</span>` +
+      `<a data-go="semester">${escapeHtml(state.semester)}</a><span class="sep">/</span><b>${escapeHtml(state.month)}</b>`;
+  }
+  c.innerHTML = html + gTag;
   c.querySelectorAll("a").forEach((a) => {
     a.onclick = () => {
       const go = a.getAttribute("data-go");
-      if (go === "root") { state = { subject: null, semester: null }; renderSubjects(); openSubject(null); }
-      if (go === "subject") { state.semester = null; openSubject(state.subject); }
+      if (go === "root") { state = { subject: null, semester: null, month: null }; renderSubjects(); openSubject(null); }
+      if (go === "subject") { state.semester = null; state.month = null; openSubject(state.subject); }
+      if (go === "semester") { state.month = null; openSemester(state.semester); }
     };
   });
 }
 
 async function openSubject(subject) {
   if (subject) state.subject = subject;
+  state.semester = null; state.month = null;
   openModal();
   renderCrumb();
   const body = $("#modalBody");
@@ -232,13 +268,29 @@ async function openSubject(subject) {
     sems.forEach((sem) => {
       const row = document.createElement("div");
       row.className = "row";
+      const del = isAdmin()
+        ? `<button class="btn danger small act-delfolder" title="删除整个学期文件夹及其中的试卷">删除</button>` : "";
       row.innerHTML = `<div class="left"><span class="ico">📁</span><span class="title">${escapeHtml(sem)}</span></div>
-        <span class="btn ghost small">打开 ›</span>`;
+        <div class="row-actions">${del}<span class="btn ghost small">打开 ›</span></div>`;
       row.onclick = () => openSemester(sem);
+      const delBtn = row.querySelector(".act-delfolder");
+      if (delBtn) delBtn.onclick = (ev) => { ev.stopPropagation(); deleteFolder(`papers/${state.subject}/${sem}/`, "学期「" + sem + "」", () => openSubject(state.subject)); };
       body.appendChild(row);
     });
   } catch (e) {
     body.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+/** 删除文件夹（学期或月份），二次确认 */
+async function deleteFolder(prefix, label, refresh) {
+  if (!confirm(`确定删除${label}？\n其中的所有试卷会一并删除，此操作不可恢复！`)) return;
+  try {
+    const r = await apiDeleteFolder(prefix);
+    toast(`已删除${label}（含 ${r.deleted} 份文件）`);
+    refresh();
+  } catch (e) {
+    toast(e.message, true);
   }
 }
 
@@ -249,52 +301,132 @@ function gradeBadge(g) {
 }
 
 async function openSemester(semester) {
-  state.semester = semester;
+  state.semester = semester; state.month = null;
   renderCrumb();
   const body = $("#modalBody");
   body.innerHTML = '<div class="empty"><span class="spinner"></span> 加载中…</div>';
   try {
     const data = await apiList("papers/" + state.subject + "/" + semester + "/");
+    const months = data.prefixes.map((p) => p.split("/").filter(Boolean).pop());
     const all = data.objects || [];
     const papers = all.filter((o) => matchGrade(o.grade));
-    if (!papers.length) {
-      body.innerHTML = gradeFilter
+
+    body.innerHTML = "";
+
+    // 管理员工具条：新建文件夹 / 删除本学期
+    if (isAdmin()) {
+      const bar = document.createElement("div");
+      bar.className = "folder-toolbar";
+      bar.innerHTML = `
+        <button class="btn small act-newfolder">＋ 新建文件夹</button>
+        <button class="btn danger small act-delfolder">删除本学期</button>
+        <span class="hint">新建后可把试卷移动进去（如按月份：10月）</span>`;
+      bar.querySelector(".act-newfolder").onclick = () => createMonthFolder();
+      bar.querySelector(".act-delfolder").onclick = () =>
+        deleteFolder(`papers/${state.subject}/${semester}/`, "学期「" + semester + "」", () => openSubject(state.subject));
+      body.appendChild(bar);
+    }
+
+    if (!months.length && !papers.length) {
+      body.insertAdjacentHTML("beforeend", gradeFilter
         ? '<div class="empty">当前年级筛选下没有试卷，切换上方「年级」试试。</div>'
-        : '<div class="empty">这个学期还没有试卷。</div>';
+        : '<div class="empty">这个学期还没有试卷。</div>');
       return;
     }
-    body.innerHTML = "";
-    papers.forEach((obj) => {
-      const name = obj.key.split("/").pop();
+
+    // 月份文件夹
+    months.forEach((mon) => {
       const row = document.createElement("div");
       row.className = "row";
-      const del = isAdmin() ? `<button class="btn danger small act-del">删除</button>` : "";
-      const fix = isAdmin() ? `<button class="btn ghost small act-fix">归类</button>` : "";
-      row.innerHTML = `<div class="left"><span class="ico">📄</span>
-          <span class="title">${escapeHtml(name)}</span>
-          ${gradeBadge(obj.grade)}
-          <span class="size">${fmtSize(obj.size)}</span></div>
-        <div class="row-actions">
-          <a class="btn small act-dl" href="${apiBase}/api/download?key=${encodeURIComponent(obj.key)}">下载</a>
-          ${fix}${del}
-        </div>`;
-      row.querySelector(".act-dl").onclick = (ev) => {
-        ev.preventDefault();
-        window.location.href = apiBase + "/api/download?key=" + encodeURIComponent(obj.key);
-      };
-      const delBtn = row.querySelector(".act-del");
-      if (delBtn) delBtn.onclick = () => deletePaper(obj.key);
-      const fixBtn = row.querySelector(".act-fix");
-      if (fixBtn) fixBtn.onclick = () => startReclassify(row, obj);
+      const del = isAdmin() ? `<button class="btn danger small act-delfolder">删除</button>` : "";
+      row.innerHTML = `<div class="left"><span class="ico">🗂️</span><span class="title">${escapeHtml(mon)}</span></div>
+        <div class="row-actions">${del}<span class="btn ghost small">打开 ›</span></div>`;
+      row.onclick = () => openMonth(mon);
+      const delBtn = row.querySelector(".act-delfolder");
+      if (delBtn) delBtn.onclick = (ev) => { ev.stopPropagation(); deleteFolder(`papers/${state.subject}/${semester}/${mon}/`, "文件夹「" + mon + "」", () => openSemester(semester)); };
       body.appendChild(row);
+    });
+
+    // 未放入文件夹的试卷
+    papers.forEach((obj) => {
+      body.appendChild(paperRow(obj, ""));
     });
   } catch (e) {
     body.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
   }
 }
 
-/* ---------- 归类（把文件移到正确的 科目/学期，并补填年级） ---------- */
-function startReclassify(row, obj) {
+/** 新建月份文件夹（也允许自定义名字） */
+function createMonthFolder() {
+  if (DEMO) { toast("演示模式：该操作需部署后端后才能使用"); return; }
+  const opts = MONTHS.map((m, i) => `${i + 1}. ${m}`).join("　");
+  const v = prompt("输入文件夹名（如 10月）\n\n常用月份：\n" + opts, "");
+  if (!v || !v.trim()) return;
+  const name = v.trim();
+  if (name.includes("/") || name === ".keep") { toast("文件夹名不能包含 / ", true); return; }
+  apiCreateFolder(`papers/${state.subject}/${state.semester}/${name}/`)
+    .then(() => { toast("已创建文件夹 " + name); openSemester(state.semester); })
+    .catch((e) => toast(e.message, true));
+}
+
+async function openMonth(month) {
+  state.month = month;
+  renderCrumb();
+  const body = $("#modalBody");
+  body.innerHTML = '<div class="empty"><span class="spinner"></span> 加载中…</div>';
+  try {
+    const prefix = `papers/${state.subject}/${state.semester}/${month}/`;
+    const data = await apiList(prefix);
+    const all = data.objects || [];
+    const papers = all.filter((o) => matchGrade(o.grade));
+    body.innerHTML = "";
+    if (isAdmin()) {
+      const bar = document.createElement("div");
+      bar.className = "folder-toolbar";
+      bar.innerHTML = `<button class="btn danger small act-delfolder">删除此文件夹</button>
+        <span class="hint">删除后其中的试卷一并删除</span>`;
+      bar.querySelector(".act-delfolder").onclick = () =>
+        deleteFolder(prefix, "文件夹「" + month + "」", () => openSemester(state.semester));
+      body.appendChild(bar);
+    }
+    if (!papers.length) {
+      body.insertAdjacentHTML("beforeend", '<div class="empty">这个文件夹还没有试卷。</div>');
+      return;
+    }
+    papers.forEach((obj) => body.appendChild(paperRow(obj, month)));
+  } catch (e) {
+    body.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+/** 一份试卷的行（在学期视图或月份视图通用）；month 为空串表示未入文件夹 */
+function paperRow(obj, month) {
+  const name = obj.key.split("/").pop();
+  const row = document.createElement("div");
+  row.className = "row";
+  const del = isAdmin() ? `<button class="btn danger small act-del">删除</button>` : "";
+  const move = isAdmin() ? `<button class="btn ghost small act-fix">移动 / 归类</button>` : "";
+  row.innerHTML = `<div class="left"><span class="ico">📄</span>
+      <span class="title">${escapeHtml(name)}</span>
+      ${gradeBadge(obj.grade)}
+      <span class="size">${fmtSize(obj.size)}</span></div>
+    <div class="row-actions">
+      <a class="btn small act-dl" href="${apiBase}/api/download?key=${encodeURIComponent(obj.key)}">下载</a>
+      ${move}${del}
+    </div>`;
+  row.querySelector(".act-dl").onclick = (ev) => {
+    ev.preventDefault();
+    window.location.href = apiBase + "/api/download?key=" + encodeURIComponent(obj.key);
+  };
+  const delBtn = row.querySelector(".act-del");
+  if (delBtn) delBtn.onclick = () => deletePaper(obj.key, month);
+  const fixBtn = row.querySelector(".act-fix");
+  if (fixBtn) fixBtn.onclick = () => startReclassify(row, obj, month);
+  return row;
+}
+
+/* ---------- 移动 / 归类（把文件移到其它 科目/学期/月份，并补填年级） ---------- */
+function startReclassify(row, obj, currentMonth) {
   const name = obj.key.split("/").pop();
   const editor = document.createElement("div");
   editor.className = "row row-edit";
@@ -309,30 +441,32 @@ function startReclassify(row, obj) {
         ${SUBJECT_LIST.map((s) => `<option value="${escapeHtml(s)}"${state.subject === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}
       </select>
       <select class="text-input small edit-semester">${semesterOptions(state.semester || CURRENT_SEMESTER)}</select>
+      <select class="text-input small edit-month">${monthOptions(currentMonth || "")}</select>
       <button class="btn small primary edit-save">保存</button>
       <button class="btn ghost small edit-cancel">取消</button>
     </div>`;
   row.replaceWith(editor);
-  editor.querySelector(".edit-cancel").onclick = () => openSemester(state.semester);
+  editor.querySelector(".edit-cancel").onclick = () => (state.month ? openMonth(state.month) : openSemester(state.semester));
   editor.querySelector(".edit-save").onclick = async () => {
     const grade = editor.querySelector(".edit-grade").value;
     const subject = editor.querySelector(".edit-subject").value;
     const semester = editor.querySelector(".edit-semester").value.trim();
+    const month = editor.querySelector(".edit-month").value.trim();
     if (!subject || !semester) { toast("请填写科目和学期", true); return; }
     try {
-      await apiMove(obj.key, subject, semester, grade);
-      toast("已归类到 " + subject + " / " + semester);
-      openSemester(state.semester);
+      await apiMove(obj.key, subject, semester, grade, month);
+      toast("已移动到 " + subject + " / " + semester + (month ? " / " + month : ""));
+      state.month ? openMonth(state.month) : openSemester(state.semester);
     } catch (e) { toast(e.message, true); }
   };
 }
 
-async function deletePaper(key) {
+async function deletePaper(key, month) {
   if (!confirm("确定删除这份试卷？此操作不可恢复。")) return;
   try {
     await apiDelete(key);
     toast("已删除");
-    openSemester(state.semester);
+    month ? openMonth(month) : openSemester(state.semester);
   } catch (e) {
     toast("删除失败：" + e.message, true);
   }
@@ -378,6 +512,14 @@ function semesterOptions(selected) {
     `<option value="${escapeHtml(s)}"${s === selected ? " selected" : ""}>${escapeHtml(s)}</option>`).join("");
 }
 
+function monthOptions(selected) {
+  const list = MONTHS.slice();
+  if (selected && list.indexOf(selected) < 0) list.unshift(selected);
+  return `<option value=""${!selected ? " selected" : ""}>不按月份</option>` +
+    list.map((m) =>
+      `<option value="${escapeHtml(m)}"${m === selected ? " selected" : ""}>${escapeHtml(m)}</option>`).join("");
+}
+
 function renderReview() {
   const box = $("#reviewBox");
   const list = $("#reviewList");
@@ -403,6 +545,7 @@ function renderReview() {
         <select class="text-input tiny" data-i="${i}" data-f="grade">${gradeOptions(p.grade)}</select>
         <select class="text-input tiny" data-i="${i}" data-f="subject">${subjectOptions(p.subject)}</select>
         <select class="text-input tiny" data-i="${i}" data-f="semester">${semesterOptions(p.semester)}</select>
+        <select class="text-input tiny" data-i="${i}" data-f="month">${monthOptions(p.month)}</select>
         <button class="icon-btn" data-del="${i}" title="移除">✕</button>`;
     }
     list.appendChild(row);
@@ -439,6 +582,7 @@ function rowStateRefresh(i, el) {
 async function buildPending(fileList) {
   const bulkGrade = $("#bulkGrade").value;
   const bulkSemester = $("#bulkSemester").value.trim();
+  const bulkMonth = $("#bulkMonth").value.trim();
   const files = Array.from(fileList || []);
   let added = 0, zips = 0;
 
@@ -448,13 +592,14 @@ async function buildPending(fileList) {
       try {
         const entries = await SmartZip.unzip(file);
         for (const e of entries) {
-          const guess = SmartZip.classify(e.name, SUBJECT_LIST, bulkSemester, SEMESTERS);
+          const guess = SmartZip.classify(e.name, SUBJECT_LIST, bulkSemester, SEMESTERS, bulkMonth);
           pending.push({
             name: e.base,
             blob: e.data,
             grade: bulkGrade || guess.grade,
             subject: guess.subject || UNCLASSIFIED,
             semester: guess.semester,
+            month: guess.month || "",
           });
           added++;
         }
@@ -467,18 +612,20 @@ async function buildPending(fileList) {
           grade: bulkGrade || "",
           subject: UNCLASSIFIED,
           semester: bulkSemester || "",
+          month: bulkMonth || "",
         });
         added++;
         toast(file.name + " 本地解压失败，改由服务器解压：" + err.message);
       }
     } else {
-      const guess = SmartZip.classify(file.name, SUBJECT_LIST, bulkSemester, SEMESTERS);
+      const guess = SmartZip.classify(file.name, SUBJECT_LIST, bulkSemester, SEMESTERS, bulkMonth);
       pending.push({
         name: file.name,
         blob: file,
         grade: bulkGrade || guess.grade,
         subject: guess.subject || UNCLASSIFIED,
         semester: guess.semester,
+        month: guess.month || "",
       });
       added++;
     }
@@ -595,10 +742,13 @@ function init() {
     if (e.key === "Escape") { closeModal(); closeAdmin(); }
   });
 
-  // 填充「统一归类」的学期下拉
+  // 填充「统一归类」的学期 / 月份下拉
   const bs = $("#bulkSemester");
   bs.insertAdjacentHTML("beforeend", SEMESTERS.map((s) =>
     `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join(""));
+  const bm = $("#bulkMonth");
+  bm.insertAdjacentHTML("beforeend", MONTHS.map((m) =>
+    `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join(""));
 
   refreshTokenUI();
   renderFilterTip();

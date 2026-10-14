@@ -30,6 +30,7 @@ export async function onRequest({ request, env }) {
         const folder = rel.split("/")[0];
         prefixes.add(prefix + folder + "/");
       } else {
+        if (rel === ".keep") continue;   // 文件夹占位符，不作为文件展示
         const meta = k.metadata || {};
         objects.push({
           key: k.name,

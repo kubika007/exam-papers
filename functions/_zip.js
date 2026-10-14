@@ -147,7 +147,14 @@ export function detectSemester(text, list) {
   return cur;
 }
 
-export function classify(path, subjects, fallbackSemester, semesterList) {
+export function detectMonth(text) {
+  const m = String(text || "").match(/(\d{1,2})\s*月/);
+  if (!m) return "";
+  const n = +m[1];
+  return n >= 1 && n <= 12 ? n + "月" : "";
+}
+
+export function classify(path, subjects, fallbackSemester, semesterList, fallbackMonth) {
   const list = semesterList && semesterList.length ? semesterList : semesters();
   return {
     grade: detectGrade(path),
@@ -155,5 +162,8 @@ export function classify(path, subjects, fallbackSemester, semesterList) {
     semester: fallbackSemester && String(fallbackSemester).trim()
       ? String(fallbackSemester).trim()
       : detectSemester(path, list),
+    month: fallbackMonth && String(fallbackMonth).trim()
+      ? String(fallbackMonth).trim()
+      : detectMonth(path),
   };
 }

@@ -159,8 +159,19 @@
     return cur;
   }
 
-  /** 综合识别：返回 {grade, subject, semester}，识别不到则为空串 / 未分类 */
-  function classify(path, subjects, fallbackSemester, semesterList) {
+  /* ---------- 月份 ---------- */
+  const MONTHS = ["1月", "2月", "3月", "4月", "5月", "6月",
+    "7月", "8月", "9月", "10月", "11月", "12月"];
+
+  function detectMonth(text) {
+    const m = String(text || "").match(/(\d{1,2})\s*月/);
+    if (!m) return "";
+    const n = +m[1];
+    return n >= 1 && n <= 12 ? n + "月" : "";
+  }
+
+  /** 综合识别：返回 {grade, subject, semester, month}，识别不到则为空串 / 未分类 */
+  function classify(path, subjects, fallbackSemester, semesterList, fallbackMonth) {
     const text = String(path || "");
     const list = semesterList && semesterList.length ? semesterList : semesters();
     return {
@@ -169,11 +180,14 @@
       semester: fallbackSemester && fallbackSemester.trim()
         ? fallbackSemester.trim()
         : detectSemester(text, list),
+      month: fallbackMonth && fallbackMonth.trim()
+        ? fallbackMonth.trim()
+        : detectMonth(text),
     };
   }
 
   window.SmartZip = {
-    unzip, classify, detectGrade, detectSubject, detectSemester,
-    semesters, currentSemester,
+    unzip, classify, detectGrade, detectSubject, detectSemester, detectMonth,
+    semesters, currentSemester, months: MONTHS,
   };
 })();

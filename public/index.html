@@ -69,7 +69,7 @@
       <input id="upFiles" class="file-input" type="file" multiple
              accept=".zip,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" />
       <p class="hint">
-        可直接拖入 <b>.zip 压缩包</b>：会自动解压，并按「文件夹名 / 文件名」识别<b>年级 · 科目 · 学期</b>，
+        可直接拖入 <b>.zip 压缩包</b>：会自动解压，并按「文件夹名 / 文件名」识别<b>年级 · 科目 · 学期 · 月份</b>，
         识别结果在下方清单里可逐条修改。<br />
         单份不超过 25MB。
       </p>
@@ -87,8 +87,11 @@
         <select id="bulkSemester" class="text-input small">
           <option value="">学期：自动识别</option>
         </select>
+        <select id="bulkMonth" class="text-input small">
+          <option value="">月份：自动识别</option>
+        </select>
       </div>
-      <p class="hint">选了就覆盖全部文件的年级 / 学期；留空则按文件名自动识别。</p>
+      <p class="hint">选了就覆盖全部文件的年级 / 学期 / 月份；留空则按文件名自动识别（文件名含「10月」会自动选中）。</p>
     </div>
 
     <div id="reviewBox" class="review-box hidden">

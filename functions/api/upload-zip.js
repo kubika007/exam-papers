@@ -1,7 +1,7 @@
 /**
  * POST /api/upload-zip  (需管理员 Bearer Token) —— 兜底方案
  * 浏览器本地解压失败时，把整个 .zip 传上来，由服务端解压并自动识别 年级/科目/学期。
- * 表单字段：file(单个 zip)、grade(可选，统一覆盖)、semester(可选，统一覆盖)
+ * 表单字段：file(单个 zip)、grade(可选，统一覆盖)、semester(可选，统一覆盖)、month(可选，统一覆盖)
  * 注意：Workers 免费层每请求 CPU 约 10ms，所以限制 300 个条目 / 解压后 60MB。
  */
 import { parseZip, classify, semesters } from "../_zip.js";
@@ -28,6 +28,7 @@ export async function onRequestPost({ request, env }) {
   const file = form.get("file");
   const bulkGrade = (form.get("grade") || "").toString().trim();
   const bulkSemester = (form.get("semester") || "").toString().trim();
+  const bulkMonth = (form.get("month") || "").toString().trim();
   if (!file) return new Response("没有收到压缩包", { status: 400 });
 
   let entries;
@@ -42,11 +43,12 @@ export async function onRequestPost({ request, env }) {
   const results = [];
   const failed = [];
   for (const e of entries) {
-    const g = classify(e.name, null, bulkSemester, list);
+    const g = classify(e.name, null, bulkSemester, list, bulkMonth);
     const subject = g.subject || "未分类";
     const semester = g.semester;
     const grade = bulkGrade || g.grade;
-    const key = `papers/${subject}/${semester}/${e.base}`;
+    const month = g.month;
+    const key = `papers/${subject}/${semester}/${month ? month + "/" : ""}${e.base}`;
     if (e.data.byteLength > MAX_SIZE) {
       failed.push({ name: e.base, reason: "超过 25MB" });
       continue;
@@ -59,10 +61,11 @@ export async function onRequestPost({ request, env }) {
           grade: grade,
           subject: subject,
           semester: semester,
+          month: month,
           uploaded: new Date().toISOString(),
         },
       });
-      results.push({ key, name: e.base, grade, subject, semester });
+      results.push({ key, name: e.base, grade, subject, semester, month });
     } catch (err) {
       failed.push({ name: e.base, reason: err.message });
     }
