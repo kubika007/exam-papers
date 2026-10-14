@@ -26,6 +26,7 @@ export async function onRequestPost({ request, env }) {
 
   const subject = (form.get("subject") || "").toString().trim();
   const semester = (form.get("semester") || "").toString().trim();
+  const month = (form.get("month") || "").toString().trim(); // 月份（可选，如 10月）
   const grade = (form.get("grade") || "").toString().trim(); // 年级（可为空＝未标年级）
   const files = form.getAll("file");
 
