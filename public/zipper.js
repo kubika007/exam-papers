@@ -109,44 +109,71 @@
     return "";
   }
 
-  /** 按当前日期推算默认学年，如 2026-02 → "2025-2026 下学期" */
-  function currentSemester() {
+  /* ---------- 学期下拉选项：从 2024 年上半年到当前学期 ---------- */
+  function semesters(startYear) {
     const d = new Date();
     const y = d.getFullYear(), m = d.getMonth() + 1;
-    if (m >= 9) return (y) + "-" + (y + 1) + " 上学期";
-    if (m <= 1) return (y - 1) + "-" + y + " 上学期";
-    return (y - 1) + "-" + y + " 下学期";
+    const from = startYear || 2024;
+    const out = [];
+    for (let yy = from; yy <= y; yy++) {
+      out.push(yy + "年上半年");
+      if (yy < y || m >= 7) out.push(yy + "年下半年"); // 7 月起算下半年
+    }
+    return out;
   }
 
-  function detectSemester(text) {
+  /** 当前学期 = 列表最后一项 */
+  function currentSemester(list) {
+    const l = list && list.length ? list : semesters();
+    return l[l.length - 1];
+  }
+
+  function detectSemester(text, list) {
+    const l = list && list.length ? list : semesters();
     const t = String(text || "").replace(/\s+/g, " ");
-    let range = null;
-    const m1 = t.match(/(20\d{2})\s*[-–—~]\s*(20\d{2})/);
-    if (m1) range = m1[1] + "-" + m1[2];
-    if (!range) {
-      const m2 = t.match(/(20\d{2})\s*[-–—~]\s*(\d{2})\b/);
-      if (m2) range = m2[1] + "-" + m2[1].slice(0, 2) + m2[2];
-    }
+
+    let year = null;
+    const my = t.match(/(20\d{2})\s*年/) || t.match(/(20\d{2})/);
+    if (my) year = +my[1];
+
     let half = "";
-    if (/下学期|春季/.test(t)) half = "下学期";
-    else if (/上学期|秋季/.test(t)) half = "上学期";
-    if (range && half) return range + " " + half;
-    if (range) return range + " 上学期";
-    if (half) return currentSemester().replace(/ (上|下)学期$/, " " + half);
-    return currentSemester();
+    if (/下半年|下学期|春季/.test(t)) half = "下半年";
+    else if (/上半年|上学期|秋季/.test(t)) half = "上半年";
+
+    const cur = currentSemester(l);
+    const inList = (s) => (l.indexOf(s) >= 0 ? s : null);
+
+    if (year !== null && half) {
+      const s = year + "年" + half;
+      if (inList(s)) return s;
+      return year < parseInt(l[0], 10) ? l[0] : cur;   // 超出范围就取最近的一端
+    }
+    if (year !== null) {
+      const s = year + "年" + cur.slice(5);            // 只认出年份 → 沿用当前半年
+      return inList(s) || (year < parseInt(l[0], 10) ? l[0] : cur);
+    }
+    if (half) {
+      const s = cur.slice(0, 4) + "年" + half;         // 只认出上下半年 → 沿用当前年份
+      return inList(s) || cur;
+    }
+    return cur;
   }
 
   /** 综合识别：返回 {grade, subject, semester}，识别不到则为空串 / 未分类 */
-  function classify(path, subjects, fallbackSemester) {
+  function classify(path, subjects, fallbackSemester, semesterList) {
     const text = String(path || "");
+    const list = semesterList && semesterList.length ? semesterList : semesters();
     return {
       grade: detectGrade(text),
       subject: detectSubject(text, subjects),
       semester: fallbackSemester && fallbackSemester.trim()
         ? fallbackSemester.trim()
-        : detectSemester(text),
+        : detectSemester(text, list),
     };
   }
 
-  window.SmartZip = { unzip, classify, detectGrade, detectSubject, detectSemester, currentSemester };
+  window.SmartZip = {
+    unzip, classify, detectGrade, detectSubject, detectSemester,
+    semesters, currentSemester,
+  };
 })();

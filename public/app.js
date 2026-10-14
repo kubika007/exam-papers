@@ -27,6 +27,11 @@ const SUBJECT_EMOJI = Object.fromEntries(SUBJECTS.map((s) => [s.name, s.emoji]))
 SUBJECT_EMOJI[UNCLASSIFIED] = "📥";
 const FALLBACK_EMOJI = "📘";
 
+// 学期固定下拉选项：2024年上半年 起，到当前学期为止
+const SmartZip = window.SmartZip || {};
+const SEMESTERS = SmartZip.semesters ? SmartZip.semesters(2024) : [];
+const CURRENT_SEMESTER = SEMESTERS.length ? SEMESTERS[SEMESTERS.length - 1] : "";
+
 /* ---------- demo 数据 ---------- */
 const DEMO_DATA = {
   "语文": { "2025-2026 上学期": [["第一次月考.pdf", "七年级"], ["期中考试.pdf", "八年级"], ["期末考试.pdf", "九年级"]] },
@@ -303,7 +308,7 @@ function startReclassify(row, obj) {
       <select class="text-input small edit-subject">
         ${SUBJECT_LIST.map((s) => `<option value="${escapeHtml(s)}"${state.subject === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}
       </select>
-      <input class="text-input small edit-semester" type="text" value="${escapeHtml(state.semester || "")}" placeholder="学期" />
+      <select class="text-input small edit-semester">${semesterOptions(state.semester || CURRENT_SEMESTER)}</select>
       <button class="btn small primary edit-save">保存</button>
       <button class="btn ghost small edit-cancel">取消</button>
     </div>`;
@@ -365,6 +370,14 @@ function gradeOptions(selected) {
     GRADES.map((g) => `<option value="${g}"${g === selected ? " selected" : ""}>${g}</option>`).join("");
 }
 
+function semesterOptions(selected) {
+  // 历史数据里可能有旧格式的学期名，保留它以免归类时丢失
+  const list = SEMESTERS.slice();
+  if (selected && list.indexOf(selected) < 0) list.unshift(selected);
+  return list.map((s) =>
+    `<option value="${escapeHtml(s)}"${s === selected ? " selected" : ""}>${escapeHtml(s)}</option>`).join("");
+}
+
 function renderReview() {
   const box = $("#reviewBox");
   const list = $("#reviewList");
@@ -378,12 +391,20 @@ function renderReview() {
   pending.forEach((p, i) => {
     const row = document.createElement("div");
     row.className = "rev-row" + (p.subject === UNCLASSIFIED || !p.grade ? " rev-warn" : "");
-    row.innerHTML = `
-      <span class="rev-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
-      <select class="text-input tiny" data-i="${i}" data-f="grade">${gradeOptions(p.grade)}</select>
-      <select class="text-input tiny" data-i="${i}" data-f="subject">${subjectOptions(p.subject)}</select>
-      <input class="text-input tiny" data-i="${i}" data-f="semester" value="${escapeHtml(p.semester)}" />
-      <button class="icon-btn" data-del="${i}" title="移除">✕</button>`;
+    if (p.isZip) {
+      // 本地解压失败的整包：由服务器解压并识别，这里只能整包处理
+      row.innerHTML = `
+        <span class="rev-name" title="${escapeHtml(p.name)}">📦 ${escapeHtml(p.name)}</span>
+        <span class="rev-note" style="grid-column: span 3">服务器解压并自动识别</span>
+        <button class="icon-btn" data-del="${i}" title="移除">✕</button>`;
+    } else {
+      row.innerHTML = `
+        <span class="rev-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+        <select class="text-input tiny" data-i="${i}" data-f="grade">${gradeOptions(p.grade)}</select>
+        <select class="text-input tiny" data-i="${i}" data-f="subject">${subjectOptions(p.subject)}</select>
+        <select class="text-input tiny" data-i="${i}" data-f="semester">${semesterOptions(p.semester)}</select>
+        <button class="icon-btn" data-del="${i}" title="移除">✕</button>`;
+    }
     list.appendChild(row);
   });
 
@@ -401,8 +422,7 @@ function renderReview() {
         return;
       }
       pending[i][f] = el.value;
-      if (f === "semester") renderReview();
-      else rowStateRefresh(i, el);
+      rowStateRefresh(i, el);
     };
   });
   list.querySelectorAll("[data-del]").forEach((b) => {
@@ -428,7 +448,7 @@ async function buildPending(fileList) {
       try {
         const entries = await SmartZip.unzip(file);
         for (const e of entries) {
-          const guess = SmartZip.classify(e.name, SUBJECT_LIST, bulkSemester);
+          const guess = SmartZip.classify(e.name, SUBJECT_LIST, bulkSemester, SEMESTERS);
           pending.push({
             name: e.base,
             blob: e.data,
@@ -439,10 +459,20 @@ async function buildPending(fileList) {
           added++;
         }
       } catch (err) {
-        toast(file.name + " 解压失败：" + err.message, true);
+        // 本地解压失败（旧浏览器 / 特殊压缩包）→ 兜底：整包交给服务器解压
+        pending.push({
+          name: file.name,
+          blob: file,
+          isZip: true,
+          grade: bulkGrade || "",
+          subject: UNCLASSIFIED,
+          semester: bulkSemester || "",
+        });
+        added++;
+        toast(file.name + " 本地解压失败，改由服务器解压：" + err.message);
       }
     } else {
-      const guess = SmartZip.classify(file.name, SUBJECT_LIST, bulkSemester);
+      const guess = SmartZip.classify(file.name, SUBJECT_LIST, bulkSemester, SEMESTERS);
       pending.push({
         name: file.name,
         blob: file,
@@ -473,9 +503,32 @@ async function doUpload() {
     item.textContent = "上传中：" + p.name;
     log.appendChild(item);
     try {
+      // 整包兜底上传（服务器解压）
+      if (p.isZip) {
+        const fd = new FormData();
+        fd.append("grade", p.grade || "");
+        fd.append("semester", p.semester || "");
+        fd.append("file", p.blob, p.name);
+        const res = await fetch(apiBase + "/api/upload-zip", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token() },
+          body: fd,
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data || !data.ok) {
+          throw new Error(res.status === 401 ? "口令错误：请重新输入并保存 ADMIN_TOKEN"
+            : (data && data.error) || "服务器解压上传失败 " + res.status);
+        }
+        item.className = "item ok";
+        item.textContent = `✓ ${p.name}（服务器解压，入库 ${data.count} 份` +
+          (data.failed && data.failed.length ? `，失败 ${data.failed.length} 份` : "") + "）";
+        okCount++;
+        continue;
+      }
+
       const fd = new FormData();
       fd.append("subject", p.subject);
-      fd.append("semester", p.semester || SmartZip.currentSemester());
+      fd.append("semester", p.semester || CURRENT_SEMESTER);
       fd.append("grade", p.grade || "");
       fd.append("file", p.blob, p.name);
       const res = await fetch(apiBase + "/api/upload", {
@@ -483,7 +536,15 @@ async function doUpload() {
         headers: { Authorization: "Bearer " + token() },
         body: fd,
       });
-      if (!res.ok) throw new Error(res.status === 401 ? "口令错误或无权限" : "上传失败 " + res.status);
+      if (!res.ok) {
+        let detail = "";
+        try { detail = (await res.text()).slice(0, 160); } catch (e) { /* 忽略 */ }
+        let msg;
+        if (res.status === 401) msg = "口令错误：请重新输入并保存 ADMIN_TOKEN";
+        else if (res.status === 413) msg = "文件超过 25MB，压缩后再传";
+        else msg = "上传失败 " + res.status + (detail ? "：" + detail : "");
+        throw new Error(msg);
+      }
       item.className = "item ok";
       item.textContent = "✓ " + p.name + "　" + (p.grade || "未标年级") + " · " + p.subject + " · " + p.semester;
       okCount++;
@@ -533,6 +594,11 @@ function init() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { closeModal(); closeAdmin(); }
   });
+
+  // 填充「统一归类」的学期下拉
+  const bs = $("#bulkSemester");
+  bs.insertAdjacentHTML("beforeend", SEMESTERS.map((s) =>
+    `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join(""));
 
   refreshTokenUI();
   renderFilterTip();
